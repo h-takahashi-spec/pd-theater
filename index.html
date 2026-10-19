@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ジレンマ劇場</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Zen+Maru+Gothic:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <a class="brand" href="index.html"><b id="siteTitle">ジレンマ劇場</b><span id="siteSub"></span></a>
+    <nav class="toplinks"><a class="chiplink" href="index.html">ゲーム一覧</a><a class="chiplink" id="resultsLink" href="results.html">みんなの結果</a></nav>
+  </header>
+  <div id="demoBanner" class="demo-banner hidden">デモモードで動いています（回答はこのブラウザの中だけに保存されます）。授業で使うときは <code>js/config.js</code> に Apps Script の URL を設定してください。</div>
+  <main id="app" aria-live="polite"></main>
+</div>
+<script src="js/config.js"></script>
+<script src="js/common.js"></script>
+<script src="js/art.js"></script>
+<script src="js/games.js"></script>
+<script src="js/play.js"></script>
+</body>
+</html>

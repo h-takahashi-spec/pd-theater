@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>みんなの結果｜ジレンマ劇場</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Zen+Maru+Gothic:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap wide">
+  <header class="topbar">
+    <a class="brand" href="index.html"><b id="siteTitle">ジレンマ劇場</b><span>みんなの結果</span></a>
+    <nav class="toplinks"><a class="chiplink" href="index.html">ゲーム一覧</a></nav>
+  </header>
+  <div id="demoBanner" class="demo-banner hidden">デモモード：サンプルデータ（22人分ほど）と、このブラウザで遊んだ回答を表示しています。先生モードのパスワードは <b>demo</b> です。</div>
+
+  <nav class="tabs" id="tabs" aria-label="ゲームの切り替え"></nav>
+
+  <section class="panel tight teacher" id="teacherPanel">
+    <div class="filters" style="margin:0">
+      <b>先生モード</b>
+      <span id="tLogin"><input type="password" id="pw" placeholder="パスワード" style="font:inherit;border:2px solid var(--ink);border-radius:8px;padding:2px 8px;width:10em"> <button class="btn ghost" id="pwBtn" style="padding:2px 12px">入る</button></span>
+      <span id="tTools" class="hidden">
+        <button class="btn primary" id="classifyBtn" style="padding:4px 14px">AIで理由を分類</button>
+        <button class="btn ghost" id="csvBtn" style="padding:2px 12px">CSVダウンロード</button>
+        <button class="btn ghost hidden" id="resetBtn" style="padding:2px 12px">デモデータを初期化</button>
+        <button class="btn ghost" id="logoutBtn" style="padding:2px 12px">出る</button>
+      </span>
+      <label class="small" style="margin-left:auto"><input type="checkbox" id="latestOnly" checked> 同じ人は最新の回答だけ</label>
+      <label class="small"><input type="checkbox" id="auto" checked> 自動更新</label>
+      <button class="btn ghost" id="reload" style="padding:2px 12px">更新</button>
+    </div>
+    <div class="small" id="tMsg" aria-live="polite"></div>
+  </section>
+
+  <main id="view" aria-live="polite"><div class="panel">読み込み中…</div></main>
+</div>
+<script src="js/config.js"></script>
+<script src="js/common.js"></script>
+<script src="js/art.js"></script>
+<script src="js/games.js"></script>
+<script src="js/results.js"></script>
+</body>
+</html>
