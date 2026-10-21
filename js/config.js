@@ -4,7 +4,7 @@
 window.GT_CONFIG = {
   // Apps Script を「ウェブアプリ」としてデプロイしたときの URL（…/exec）
   // 空のままだと「デモモード」（このブラウザの中だけで保存・サンプルデータ付き）で動きます。
-  GAS_URL: '',
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbwyPlz4YmCvCmcjKvevvyMkO48XOUVC3pE-Hl19Bu5lNdPcFlKbpyXS5FDizPgNHP_A/exec',
 
   // 全画面の上に表示する授業名
   COURSE_LABEL: '追手門学院大学 理工学部　コンピュータインタラクション 授業課題',
