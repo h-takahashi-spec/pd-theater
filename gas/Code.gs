@@ -21,7 +21,7 @@ var HEAD = ['id', 'timestamp', 'game', 'role', 'studentId', 'pid', 'nickname', '
   'choice', 'choiceLabel', 'expect', 'expectLabel', 'reason', 'detail', 'userAgent',
   'aiPrimary', 'aiFlags', 'aiBias', 'aiReason', 'aiDetail', 'aiModel', 'aiAt',
   'teacherLabel', 'teacherAt'];
-var GAMES = ['pd', 'bos', 'stag', 'chicken', 'volunteer', 'ultimatum', 'ipd_known', 'ipd_unknown'];
+var GAMES = ['pd', 'bos', 'stag', 'chicken', 'volunteer', 'ultimatum', 'dictator', 'trust', 'ipd_known', 'ipd_unknown', 'nashquiz'];
 var LABELS = ['rational', 'emotional', 'normative', 'bias', 'unclear'];
 var MAX_REASON = 2000;
 
@@ -43,6 +43,10 @@ function gameInfo_(r) {
     case 'chicken': return { name: 'チキンゲーム（一回限り）', rules: '一本橋でヤギ同士が鉢合わせ。両方ゆずれば3点ずつ、自分だけ突き進めば5点（相手1点）、自分だけゆずれば1点、両方突き進むと川に落ちて0点ずつ。相手と逆の手を取るのが得になる（純粋戦略の均衡は二つ）。' };
     case 'volunteer': return { name: 'ボランティアのジレンマ（5人・一回限り）', rules: '5人のシェアハウスにゴキブリ。誰か1人でも名乗り出て退治すれば、待った人は10点、名乗り出た人は7点。誰も名乗り出なければ全員0点。同時に相談なしで決める。この利得の対称な混合戦略均衡では、各人が名乗り出る確率は約' + Math.round(VOL_EQ.p * 100) + '%、誰も名乗り出ない確率は約' + Math.round(VOL_EQ.none * 100) + '%で、人数が増えるほど各人は名乗り出にくくなる（Diekmann 1985）。つまり「ほかの人が出る可能性が高いので自分は待つ」は均衡でも起きる合理的な推論である。ほかの人が出る見込みや誰も出ないリスクを考えたうえで待つ・出るのは rational。「誰かが必ずやる」と根拠なく確信し、誰も出ないリスクをまったく考えていない場合に限って bias（責任の分散）とする。' };
     case 'ultimatum': return { name: '最後通牒ゲーム（一回限り）', rules: '1000ゴールドを二人で分ける。分ける側が相手に渡す額を提案し、受け取る側は乗るか断るかだけ選ぶ。断ると二人とも0。学生は分ける側（提案額）と受け取る側（受け入れる最低額）の両方を決めた（この回答は' + (r.role === 'proposer' ? '分ける側' : '受け取る側') + 'の理由）。お金だけを考える相手を想定すると、受け取る側は1でも乗るのが合理的で、それを見越した分ける側は最小額を提案する。ただし実際の人は不公平な提案を断ることが多いので、「低すぎると断られそうだから多めに渡す」は相手の予測にもとづく合理的な推論である。' };
+    case 'dictator': return { name: '独裁者ゲーム（一回限り）', rules: '商店街の福引きで当たった1000円分の券を、列でたまたま隣になった見知らぬ相手と分ける。分け方は学生（回した人）が一人で決め、相手は断ることも文句を言うこともできない。匿名で、二度と会わない。お金だけを考えると0円渡すのが自己利益の最大化。最後通牒ゲームと違って断られる心配がないので、ここで渡す額は戦略ではなく、利他性・公平の規範・罪悪感・相手への共感などを反映する。「断られないので少なめ（または0円）」は自己利益にもとづく合理的な推論。「半分が公平」は規範的。学生はあわせて「ほかの人は平均いくら渡すと思うか」も答えた。' };
+    case 'trust':
+      return { name: '信頼ゲーム（一回限り）', rules: '預ける側は種かぶを10個持つ。名人（相手）に預けた分は畑で3倍になり、名人は収穫のうち何%を返すかを自由に決める（約束も契約もない）。学生は両方の役を決めた（この回答は' + (r.role === 'investor' ? '預ける側（何個預けるか）' : '名人の側（収穫の何%を返すか）') + 'の理由）。自己利益だけを考えると、名人は0%返し、それを見越した預ける側は0個預けるのが均衡。名人が収穫の1/3より多く返せば、預ける側は預けたほうが得をする。二人の合計は全部預けたとき最大（30個）。' +
+        (r.role === 'investor' ? '「名人は○%くらい返すだろうから預けても得」「返ってこないリスクがあるので少しだけ」は相手の予測とリスクにもとづく合理的な推論。「人を信じたい」は規範的。' : '「預けてくれた信頼に応えたい」「恩返し」は規範的（互恵性）。「返しても自分の得にならないので0%」は自己利益にもとづく合理的な推論。') };
     case 'ipd_known':
     case 'ipd_unknown':
       var n = +d.totalRounds || 10;
@@ -100,6 +104,7 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
   try {
     if (p.action === 'results') return json_({ ok: true, rows: publicRows_(readAll_(), false) });
+    if (p.action === 'status') return json_({ ok: true, open: openGames_() });
     return json_({ ok: true, message: 'dilemma api is running' });
   } catch (err) { return json_({ ok: false, error: String(err && err.message || err) }); }
 }
@@ -114,6 +119,8 @@ function doPost(e) {
       case 'teacherRows': auth_(b); return json_({ ok: true, rows: publicRows_(readAll_(), true) });
       case 'classify': auth_(b); return json_(classify_(b));
       case 'relabel': auth_(b); return json_(relabel_(b));
+      case 'status': return json_({ ok: true, open: openGames_() });
+      case 'setOpen': auth_(b); return json_(setOpen_(b));
     }
     return json_({ ok: false, error: '不明な操作です' });
   } catch (err) { return json_({ ok: false, error: String(err && err.message || err) }); }
@@ -123,11 +130,15 @@ function doPost(e) {
 function submit_(b) {
   var rows = b.rows || [];
   if (!rows.length || rows.length > 4) throw new Error('送信データがありません');
+  var open = openGames_();
+  rows.forEach(function (r) {
+    if (open.indexOf(gateKey_(r.game)) < 0) throw new Error('この課題はいま受け付けていません（先生が開放するまで待ってください）');
+  });
   rows.forEach(function (r) {
     if (GAMES.indexOf(r.game) < 0) throw new Error('ゲームIDが不正です');
     if (!String(r.studentId || '').trim()) throw new Error('学籍番号がありません');
     if (!String(r.nickname || '').trim()) throw new Error('ニックネームがありません');
-    if (String(r.reason || '').trim().length < 5) throw new Error('理由が短すぎます');
+    if (r.game !== 'nashquiz' && String(r.reason || '').trim().length < 5) throw new Error('理由が短すぎます');
   });
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -146,6 +157,7 @@ function submit_(b) {
         det.priorOther = prev.some(function (x) { return x.game !== r.game; });
       }
       if (r.game === 'stag' && !det.stagValue) det.stagValue = 6;
+      if (r.game === 'nashquiz') det.attempt = existing.filter(function (x) { return x.pid === pidv && x.game === 'nashquiz'; }).length + 1;
       var row = {
         id: Utilities.getUuid(), timestamp: new Date(), game: r.game, role: clean_(r.role, 20),
         studentId: sid, pid: pidv, nickname: clean_(r.nickname, 24), sessionId: clean_(r.sessionId, 40),
@@ -301,6 +313,32 @@ function latest_(rows) {
   });
   return Object.keys(m).map(function (k) { return m[k]; });
 }
+/* ================= 課題の開放（先生が開けたものだけ遊べる） =================
+ * スクリプト プロパティ OPEN_GAMES に開放中のキーを JSON 配列で保存する。
+ * 繰り返しPDは2条件まとめて 'ipd' で開閉する。 */
+var GATE_KEYS = ['pd', 'bos', 'stag', 'chicken', 'volunteer', 'ultimatum', 'dictator', 'trust', 'ipd', 'nashquiz'];
+function gateKey_(game) { return /^ipd/.test(String(game)) ? 'ipd' : String(game); }
+function openGames_() {
+  // 学生の画面が数秒おきに問い合わせるので、キャッシュから返す（開閉したときに更新）
+  var cache = CacheService.getScriptCache(), v = cache.get('OPEN_GAMES');
+  if (v == null) { v = PropertiesService.getScriptProperties().getProperty('OPEN_GAMES') || '[]'; cache.put('OPEN_GAMES', v, 60); }
+  try { var a = v ? JSON.parse(v) : []; return a.filter(function (k) { return GATE_KEYS.indexOf(k) >= 0; }); } catch (e) { return []; }
+}
+function setOpen_(b) {
+  var cur = openGames_();
+  if (b.all === true) cur = GATE_KEYS.slice();
+  else if (b.all === false) cur = [];
+  else {
+    var k = gateKey_(b.key);
+    if (GATE_KEYS.indexOf(k) < 0) throw new Error('課題IDが不正です');
+    cur = cur.filter(function (x) { return x !== k; });
+    if (b.open) cur.push(k);
+  }
+  PropertiesService.getScriptProperties().setProperty('OPEN_GAMES', JSON.stringify(cur));
+  CacheService.getScriptCache().put('OPEN_GAMES', JSON.stringify(cur), 60);
+  return { ok: true, open: cur };
+}
+
 function auth_(b) {
   var pw = PropertiesService.getScriptProperties().getProperty('TEACHER_PASSWORD');
   if (!pw) throw new Error('TEACHER_PASSWORD が設定されていません');

@@ -4,11 +4,14 @@
 window.GT_CONFIG = {
   // Apps Script を「ウェブアプリ」としてデプロイしたときの URL（…/exec）
   // 空のままだと「デモモード」（このブラウザの中だけで保存・サンプルデータ付き）で動きます。
-  GAS_URL: 'https://script.google.com/macros/s/AKfycbwyPlz4YmCvCmcjKvevvyMkO48XOUVC3pE-Hl19Bu5lNdPcFlKbpyXS5FDizPgNHP_A/exec',
+  GAS_URL: '',
+
+  // 全画面の上に表示する授業名
+  COURSE_LABEL: '追手門学院大学 理工学部　コンピュータインタラクション 授業課題',
 
   // サイトのタイトル
   SITE_TITLE: 'ジレンマ劇場',
-  SITE_SUB: '追手門学院大学 理工学部 「コンピュータインタラクション」用課題',
+  SITE_SUB: 'ゲーム理論の10の物語',
 
   // 学籍番号の形式チェック（英数字4〜12文字）。不要なら null
   STUDENT_ID_PATTERN: '^[A-Za-z0-9]{4,12}$',
@@ -45,6 +48,16 @@ window.GT_CONFIG = {
   //     最後通牒：0〜500Gを50G刻みでランダム
   //   相手の決め方は「結果発表の画面」だけに影響し、記録される選択・理由や結果ページの集計には影響しません。
   OPP_MIN_POOL: 1,
+
+  // ナッシュ均衡の課題（quiz.html）
+  //   QUIZ_SHOW_ANSWERS : 提出後に正解と解説を表示する
+  //   QUIZ_RETRY        : 提出後に「もう一度挑戦」できる（記録はすべて残り、結果ページは各自の1回目を集計）
+  QUIZ_SHOW_ANSWERS: true,
+  QUIZ_RETRY: false,
+
+  // 課題の開閉を学生の画面に反映する間隔（秒、5以上）。
+  //   ゲーム一覧・待ち画面で、先生が開くと更新しなくても鍵が外れる。画面を見ていない間は止まる。
+  STATUS_POLL_SEC: 8,
 
   // 結果ページの自動更新（秒）。0 で無効
   RESULTS_REFRESH_SEC: 20

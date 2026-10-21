@@ -38,17 +38,28 @@
     labelOf: function (r) { return r.teacherLabel || r.aiPrimary || ''; }
   };
 
+  /* ---------------- 課題の開放 ---------------- */
+  var GATES = [['pd', '囚人のジレンマ'], ['bos', '男女の争い'], ['stag', '鹿狩りゲーム'], ['chicken', 'チキンゲーム'],
+    ['volunteer', 'ボランティアのジレンマ'], ['ultimatum', '最後通牒ゲーム'], ['dictator', '独裁者ゲーム'], ['trust', '信頼ゲーム'], ['ipd', '繰り返し囚人のジレンマ（2条件とも）'], ['nashquiz', 'ナッシュ均衡の課題（quiz.html）']];
+  function gateKey(game) { return /^ipd/.test(String(game)) ? 'ipd' : String(game); }
+
   /* ---------------- 通信 ---------------- */
   var API = {
     demo: !CFG.GAS_URL,
+    demoCall: function (body) {
+      return new Promise(function (ok, ng) {
+        var j = Demo.handle(body);
+        if (j && j.ok === false) ng(new Error(j.error || 'エラー')); else ok(j);
+      });
+    },
     post: function (body) {
-      if (API.demo) return Promise.resolve(Demo.handle(body));
+      if (API.demo) return API.demoCall(body);
       return fetch(CFG.GAS_URL, { method: 'POST', body: JSON.stringify(body) })
         .then(function (r) { return r.json(); })
         .then(function (j) { if (!j.ok) throw new Error(j.error || 'サーバーエラー'); return j; });
     },
     get: function (params) {
-      if (API.demo) return Promise.resolve(Demo.handle(params));
+      if (API.demo) return API.demoCall(params);
       var q = new URLSearchParams(params).toString();
       return fetch(CFG.GAS_URL + '?' + q)
         .then(function (r) { return r.json(); })
@@ -57,16 +68,25 @@
   };
 
   /* ---------------- デモ（このブラウザ内だけで動く擬似サーバー） ---------------- */
-  var DEMO_KEY = 'gt_demo_rows_v2';
+  var DEMO_KEY = 'gt_demo_rows_v3';
+  var OPEN_KEY = 'gt_demo_open_v1';
   var Demo = {
     password: 'demo',
+    /** デモでは最初は全部開放（先生モードで閉じて動きを確かめられる） */
+    open: function () {
+      try { var v = localStorage.getItem(OPEN_KEY); if (v) return JSON.parse(v); } catch (e) { }
+      return GATES.map(function (g) { return g[0]; });
+    },
     load: function () {
       var rows = null;
       try { rows = JSON.parse(localStorage.getItem(DEMO_KEY) || 'null'); } catch (e) { rows = null; }
-      if (!rows) { rows = Demo.sample(); Demo.save(rows); }
+      if (!rows) { if (!window.GT_GAMES) return []; rows = Demo.sample(); Demo.save(rows); } // ゲーム定義のないページ（課題）ではサンプルを作らない
       return rows;
     },
-    save: function (rows) { try { localStorage.setItem(DEMO_KEY, JSON.stringify(rows)); } catch (e) { } },
+    save: function (rows) {
+      // サンプル未作成のまま課題ページで保存する場合は、サンプルを後で足せるように印をつけない
+      try { localStorage.setItem(DEMO_KEY, JSON.stringify(rows)); } catch (e) { }
+    },
     reset: function () { try { localStorage.removeItem(DEMO_KEY); } catch (e) { } },
     pub: function (r, teacher) {
       var o = Object.assign({}, r);
@@ -74,13 +94,19 @@
       return o;
     },
     handle: function (b) {
-      var rows = Demo.load();
       var action = b.action;
+      if (action === 'status') return { ok: true, open: Demo.open() };
+      var rows = Demo.load();
+      if (action === 'status') return { ok: true, open: Demo.open() };
       if (action === 'submit') {
+        var op = Demo.open();
+        var closed = (b.rows || []).filter(function (r) { return op.indexOf(gateKey(r.game)) < 0; });
+        if (closed.length) return { ok: false, error: 'この課題はいま受け付けていません（先生が開放するまで待ってください）' };
         var out = [], partners = [];
         (b.rows || []).forEach(function (r) {
           var nr = Object.assign({}, r, { id: U.uid(), ts: new Date().toISOString(), pid: U.hash(r.studentId) });
           nr.detail = Object.assign({}, r.detail || {});
+          if (r.game === 'nashquiz') nr.detail.attempt = rows.filter(function (x) { return x.pid === nr.pid && x.game === 'nashquiz'; }).length + 1;
           if (/^ipd_/.test(r.game)) {
             var prev = rows.filter(function (x) { return x.pid === nr.pid && /^ipd_/.test(x.game); });
             nr.detail.priorIPD = prev.length > 0;
@@ -110,7 +136,15 @@
         Demo.save(rows);
         return { ok: true };
       }
-      if (action === 'reset') { Demo.reset(); return { ok: true }; }
+      if (action === 'reset') { Demo.reset(); try { localStorage.removeItem(OPEN_KEY); } catch (e) { } return { ok: true }; }
+      if (action === 'setOpen') {
+        var cur = Demo.open();
+        if (b.all === true) cur = GATES.map(function (g) { return g[0]; });
+        else if (b.all === false) cur = [];
+        else { cur = cur.filter(function (k) { return k !== gateKey(b.key); }); if (b.open) cur.push(gateKey(b.key)); }
+        try { localStorage.setItem(OPEN_KEY, JSON.stringify(cur)); } catch (e) { }
+        return { ok: true, open: cur };
+      }
       return { ok: false, error: 'unknown action' };
     },
     match: function (rows, me, m) {
@@ -196,6 +230,19 @@
         rows.push({ id: 'sup' + j, ts: new Date(Date.now() - 3000e3 + j * 60e3).toISOString(), game: 'ultimatum', role: 'proposer', pid: pidU, studentId: 'S' + (2000 + j), nickname: NICK[j % NICK.length], sample: true, choice: String(off), choiceLabel: '相手に' + off + 'G渡す', expect: '', expectLabel: '', reason: pickr(UR.slice(0, 3)), detail: {} });
         rows.push({ id: 'sur' + j, ts: new Date(Date.now() - 3000e3 + j * 60e3).toISOString(), game: 'ultimatum', role: 'responder', pid: pidU, studentId: 'S' + (2000 + j), nickname: NICK[j % NICK.length], sample: true, choice: String(mao), choiceLabel: mao + 'G以上なら乗る', expect: '', expectLabel: '', reason: pickr([UR[3], '0よりはましなので、少しでももらえれば乗る。', '不公平な提案はおかしいので、それなりにないと断る。']), detail: {} });
       }
+      // 独裁者・信頼（デモ用の架空のサンプル）
+      var DR = ['断られる心配がないので、自分が多めにもらう。', '半分ずつが公平だと思う。', '知らない人だけど、0円はさすがに気が引ける。', 'たまたま回したのが自分なだけなので、相手にも少しは渡したい。'];
+      var TI = ['名人は半分くらい返してくれると思うので、預けたほうが得。', '返ってこないリスクがあるので、少しだけ預ける。', '人を信じたいので全部預けた。'];
+      var TT = ['預けてくれた信頼に応えたいので半分返す。', '返しても自分の得にならないので少なめ。', '相手が損をしないように、預けた分より多く返したい。'];
+      var ex;
+      for (var q = 0; q < 22; q++) {
+        var give = [0, 0, 100, 200, 200, 300, 300, 400, 500, 500, 500][Math.floor(rnd() * 11)];
+        var pidD = U.hash('Sult' + q); // 最後通牒のサンプルと同じ人にして、両方の比較ができるように
+        rows.push({ id: 'sdi' + q, ts: new Date(Date.now() - 1800e3 + q * 60e3).toISOString(), game: 'dictator', role: 'dictator', pid: pidD, studentId: 'S' + (2000 + q), nickname: NICK[q % NICK.length], sample: true, choice: String(give), choiceLabel: '相手に' + give + '円渡す', expect: (ex = String([100, 200, 300, 300, 400][Math.floor(rnd() * 5)])), expectLabel: 'ほかの人の平均は' + ex + '円', reason: give === 0 ? DR[0] : give === 500 ? DR[1] : pickr(DR.slice(2)), detail: { total: 1000 } });
+        var sent = [0, 2, 3, 5, 5, 6, 8, 10, 10][Math.floor(rnd() * 9)], ret = [0, 10, 20, 30, 40, 50, 50, 60][Math.floor(rnd() * 8)];
+        rows.push({ id: 'sti' + q, ts: new Date(Date.now() - 1700e3 + q * 60e3).toISOString(), game: 'trust', role: 'investor', pid: pidD, studentId: 'S' + (2000 + q), nickname: NICK[q % NICK.length], sample: true, choice: String(sent), choiceLabel: sent + '個預ける', expect: (ex = String([20, 30, 40, 50, 50][Math.floor(rnd() * 5)])), expectLabel: '名人は' + ex + '%返すと予想', reason: sent >= 8 ? TI[2] : sent >= 5 ? TI[0] : TI[1], detail: { endow: 10, mult: 3 } });
+        rows.push({ id: 'stt' + q, ts: new Date(Date.now() - 1700e3 + q * 60e3).toISOString(), game: 'trust', role: 'trustee', pid: pidD, studentId: 'S' + (2000 + q), nickname: NICK[q % NICK.length], sample: true, choice: String(ret), choiceLabel: '収穫の' + ret + '%を返す', expect: '', expectLabel: '', reason: ret >= 50 ? TT[0] : ret <= 20 ? TT[1] : TT[2], detail: { endow: 10, mult: 3 } });
+      }
       [['ipd_known', 10], ['ipd_unknown', 0]].forEach(function (pair) {
         var gid = pair[0];
         for (var k = 0; k < 16; k++) {
@@ -224,5 +271,51 @@
     }
   };
 
-  window.GT = { U: U, API: API, Demo: Demo, CFG: CFG };
+  /** 課題の開閉を見張る。
+   *  needed() が true の間だけ一定間隔で問い合わせ、状態が変わったら onChange(open, prev) を呼ぶ。
+   *  画面が隠れている間は止め、戻ってきたらすぐ確認する（サーバーの負担を抑えるため）。 */
+  function watchOpen(o) {
+    var sec = Math.max(5, +CFG.STATUS_POLL_SEC || 10), last = null, timer = null, busy = false, stopped = false;
+    function needed() { return !stopped && (!o.needed || o.needed()); }
+    function schedule() { clearTimeout(timer); if (needed()) timer = setTimeout(function () { tick(false); }, sec * 1000 * (o.slow && o.slow() ? 4 : 1) * (0.85 + Math.random() * 0.3)); }
+    function tick(force) {
+      if (busy || !needed()) return;
+      if (document.hidden && !force) return schedule();
+      busy = true;
+      API.get({ action: 'status' }).then(function (j) {
+        var open = (j.open || []).slice(), key = open.slice().sort().join(',');
+        if (o.onTick) o.onTick(open, true);
+        if (key !== last) { var prev = last === null ? null : last.split(',').filter(Boolean); last = key; if (prev !== null || o.fireFirst) o.onChange(open, prev || []); }
+      }).catch(function () { if (o.onTick) o.onTick(null, false); }).then(function () { busy = false; schedule(); });
+    }
+    function wake() { if (!document.hidden) tick(true); }
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('focus', wake);
+    window.addEventListener('online', wake);
+    return {
+      start: function (initial) { if (initial) last = initial.slice().sort().join(','); schedule(); return this; },
+      check: function () { tick(true); },
+      stop: function () { stopped = true; clearTimeout(timer); document.removeEventListener('visibilitychange', wake); window.removeEventListener('focus', wake); window.removeEventListener('online', wake); }
+    };
+  }
+  /** 画面下に出る短いお知らせ */
+  function toast(msg) {
+    var el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role', 'status'); el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function () { el.classList.add('out'); }, 4200);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 4800);
+  }
+
+  /** ヘッダーに授業名を入れる（全ページ共通） */
+  function course() {
+    var el = document.getElementById('course');
+    if (el && CFG.COURSE_LABEL) {
+      // 全角スペースで区切った単位では改行しない（スマホで「授／業課題」のように割れないように）
+      el.innerHTML = String(CFG.COURSE_LABEL).split('　').map(function (t) { return '<span>' + U.esc(t) + '</span>'; }).join(' ');
+      el.classList.remove('hidden');
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', course); else course();
+
+  window.GT = { U: U, API: API, Demo: Demo, CFG: CFG, GATES: GATES, gateKey: gateKey, watchOpen: watchOpen, toast: toast };
 })();

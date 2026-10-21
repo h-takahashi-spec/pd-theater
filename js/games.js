@@ -485,7 +485,7 @@
    * ======================================================== */
   function ipdBase(id, known) {
     return {
-      id: id, kind: 'ipd', no: known ? 8 : 7, known: known,
+      id: id, kind: 'ipd', no: known ? 10 : 9, known: known,
       title: '繰り返し囚人のジレンマ', subtitle: known ? '回数を知っている' : '回数を知らない',
       story_title: known ? 'ラーメン激戦区・最後の10週' : 'ラーメン激戦区・終わりの見えない勝負',
       tagline: known ? '10週後、商店街はなくなる。最後の週、あなたは？' : 'いつ終わるかは誰も知らない。',
@@ -559,7 +559,7 @@
 
   /* 2本セットの入口（?game=ipd）。条件がわからないように、カレンダーも「？」も出さない */
   window.GT_IPD_SET = {
-    id: 'ipd', kind: 'ipdset', no: '7・8', color: '#7a4a9e',
+    id: 'ipd', kind: 'ipdset', no: '9・10', color: '#7a4a9e',
     title: '繰り返し囚人のジレンマ', subtitle: '2本セット',
     story_title: 'ラーメン激戦区', tagline: '向かいの店と、毎週の値段の駆け引き。条件を変えて2回勝負します。',
     hero: function () {
@@ -567,6 +567,140 @@
         P.shop(100, 186, '麺屋あい', '#e2564f', { s: 0.85 }) + P.shop(300, 186, 'ゲン屋', '#2f4b7c', { s: 0.85 }) +
         T(200, 30, 'ラーメン激戦区', { fs: 20 }) + T(200, 70, 'VS', { fs: 26, fill: '#e2564f' }));
     }
+  };
+
+  /* ========================================================
+   * 7. 独裁者ゲーム（一回限り）
+   * ======================================================== */
+  var ME_D = function (o) { return C(Object.assign({ kind: 'cat', color: '#b9c7d6' }, o)); };
+  var STRANGER = function (o) { return C(Object.assign({ kind: 'dog', color: '#e8d2b0' }, o)); };
+  var SHOPKEEPER = function (o) { return C(Object.assign({ kind: 'human', hat: 'towel', bodyColor: '#e2564f', hair: '#3a2e28' }, o)); };
+  var INK2 = A.INK;
+  function drum(x, y, s, spin) {
+    return '<g transform="translate(' + x + ' ' + y + ') scale(' + (s || 1) + ')">' +
+      '<path d="M-34 40 L0 -4 L34 40" fill="none" stroke="' + INK2 + '" stroke-width="5"/><rect x="-44" y="38" width="88" height="10" rx="3" fill="#8a6446" stroke="' + INK2 + '" stroke-width="2.5"/>' +
+      '<g' + (spin ? ' transform="rotate(18)"' : '') + '><path d="M0 -38 L33 -19 L33 19 L0 38 L-33 19 L-33 -19z" fill="#e2564f" stroke="' + INK2 + '" stroke-width="3" stroke-linejoin="round"/>' +
+      '<path d="M0 -38 L0 38 M33 -19 L-33 19 M-33 -19 L33 19" stroke="#b33b35" stroke-width="2"/></g>' +
+      '<circle r="6" fill="#f2c14e" stroke="' + INK2 + '" stroke-width="2.5"/><path d="M0 0 L46 -10" stroke="' + INK2 + '" stroke-width="4" stroke-linecap="round"/><circle cx="48" cy="-10" r="6" fill="#8a6446" stroke="' + INK2 + '" stroke-width="2"/></g>';
+  }
+  function ticket(x, y, s, text) {
+    return '<g transform="translate(' + x + ' ' + y + ') scale(' + (s || 1) + ') rotate(-8)"><rect x="-44" y="-20" width="88" height="40" rx="6" fill="#fff3b0" stroke="' + INK2 + '" stroke-width="2.5"/>' +
+      '<path d="M-28 -20 v40" stroke="' + INK2 + '" stroke-width="1.5" stroke-dasharray="3 3"/>' +
+      '<text x="8" y="6" text-anchor="middle" font-size="14" font-weight="900" fill="#e2564f">' + (text || '1000円') + '</text></g>';
+  }
+  function stall() {
+    return '<rect x="0" y="0" width="400" height="240" fill="#ffe9c7"/>' +
+      '<path d="M0 0 h400 v34 h-400z" fill="#e2564f"/>' + [0, 1, 2, 3, 4, 5, 6, 7].map(function (i) { return '<path d="M' + (i * 50) + ' 34 q25 22 50 0" fill="' + (i % 2 ? '#fff' : '#e2564f') + '" stroke="' + INK2 + '" stroke-width="2"/>'; }).join('') +
+      '<text x="200" y="24" text-anchor="middle" font-size="16" fill="#fff" font-weight="900">ふたり1組の大福引き</text>' +
+      P.floor(196, '#cbb894') + '<rect x="120" y="150" width="160" height="50" fill="#fff" stroke="' + INK2 + '" stroke-width="2.5"/>';
+  }
+  GAMES.dictator = {
+    id: 'dictator', kind: 'dictator', no: 7, total: 1000, step: 50,
+    title: '独裁者ゲーム', story_title: 'ふたり1組の福引き',
+    tagline: '分け方を決めるのはあなただけ。相手は断れない。',
+    color: '#d0517e',
+    hero: function () {
+      return S(stall() + drum(200, 110, 0.9, false) + ME_D({ x: 90, y: 116, s: 0.7, expr: 'happy' }) + STRANGER({ x: 312, y: 118, s: 0.7, expr: 'normal', flip: true }) +
+        T(200, 226, 'ふたり1組の福引き', { fs: 18 }));
+    },
+    story: [
+      function () {
+        return {
+          art: S(stall() + drum(200, 110, 0.95, true) + SHOPKEEPER({ x: 320, y: 104, s: 0.75, expr: 'happy', flip: true }) +
+            ME_D({ x: 90, y: 118, s: 0.75, expr: 'happy', arms: 'up' }) + T(140, 70, 'ガラガラ…', { fs: 18, rotate: -8 })),
+          text: '商店街の夏祭り。名物の<b>「ふたり1組の大福引き」</b>に、あなたも並んだ。この福引きは、列で<b>たまたま隣になった人</b>と2人1組で引くきまりだ。'
+        };
+      },
+      function () {
+        return {
+          art: S(stall() + drum(140, 110, 0.85, false) + '<circle cx="200" cy="160" r="9" fill="#f2c14e" stroke="' + INK2 + '" stroke-width="2.5"/>' +
+            P.sparkle(230, 120, 1.4) + P.sparkle(180, 90, 1) + SHOPKEEPER({ x: 320, y: 104, s: 0.75, expr: 'shock', flip: true }) +
+            ticket(250, 90, 1.1) + T(200, 186, '大当たり〜！', { fs: 22, fill: '#e2564f' })),
+          text: 'ガラガラを回したのは、あなた。出てきたのは<b>金色の玉</b>！ 賞品は<b>1000円分のお食事券</b>。'
+        };
+      },
+      function () {
+        return {
+          art: S(stall() + ME_D({ x: 90, y: 132, s: 0.75, expr: 'think' }) + STRANGER({ x: 310, y: 134, s: 0.75, expr: 'normal', flip: true }) +
+            ticket(200, 172, 0.9) + B(120, 66, '分け方は…私が決める？', { fs: 13, think: true, to: [100, 100] })),
+          text: '店主いわく「<b>回した人が、ペアの相手との分け方を自由に決める</b>のがこの福引きのきまり」。いくら渡しても、<b>0円</b>でもいい。'
+        };
+      },
+      function () {
+        return {
+          art: S(stall() + ME_D({ x: 90, y: 132, s: 0.75, expr: 'think' }) + STRANGER({ x: 310, y: 134, s: 0.75, expr: 'normal', flip: true }) +
+            '<path d="M200 70 v120" stroke="' + INK2 + '" stroke-width="3" stroke-dasharray="6 6"/>' +
+            B(214, 66, '（何も言えない）', { fs: 13, think: true, to: [300, 100] })),
+          text: 'ペアの相手は<b>知らない人</b>で、もう会うこともない。相手は<b>断ることも文句を言うこともできず</b>、あなたが決めた額をそのまま受け取るだけ。さあ、いくら渡す？'
+        };
+      }
+    ],
+    reasonQ: 'なぜその金額にしましたか？ 相手のことをどう考えたかも書いてください。',
+    expectQ: 'ほかの参加者は、平均でいくら相手に渡すと思いますか？',
+    chars: { ME: ME_D, YOU: STRANGER },
+    stall: stall, ticket: ticket
+  };
+
+  /* ========================================================
+   * 8. 信頼ゲーム（一回限り）
+   * ======================================================== */
+  var FARMER = function (o) { return C(Object.assign({ kind: 'rabbit', color: '#efe7da' }, o)); };
+  var MEIJIN = function (o) { return C(Object.assign({ kind: 'tanuki', color: '#a9825a', hat: 'towel' }, o)); };
+  function turnip(x, y, s) {
+    return '<g transform="translate(' + x + ' ' + y + ') scale(' + (s || 1) + ')"><path d="M-2 -12 q-14 -18 -6 -26 q8 6 6 24 M2 -12 q12 -20 4 -28 q-8 8 -4 26" fill="#5fae5a" stroke="' + INK2 + '" stroke-width="1.6"/>' +
+      '<path d="M0 8 q2 6 -1 11" fill="none" stroke="' + INK2 + '" stroke-width="1.8" stroke-linecap="round"/>' +
+      '<ellipse cx="0" cy="-2" rx="11" ry="10" fill="#fff" stroke="' + INK2 + '" stroke-width="2"/>' +
+      '<path d="M-10 -6 a11 10 0 0 1 20 0 q-10 -3 -20 0z" fill="#b86bd0"/></g>';
+  }
+  function field(y) {
+    var s = '<rect x="0" y="' + y + '" width="400" height="' + (240 - y) + '" fill="#9b6b43"/>';
+    for (var i = 0; i < 4; i++) s += '<path d="M0 ' + (y + 12 + i * 14) + ' h400" stroke="#7a5233" stroke-width="5"/>';
+    return s;
+  }
+  function turnips(x0, y0, n, s) { var o = ''; for (var i = 0; i < n; i++) o += turnip(x0 + (i % 5) * 18 * (s || 1), y0 + Math.floor(i / 5) * 22 * (s || 1), (s || 1) * 0.8); return o; }
+  GAMES.trust = {
+    id: 'trust', kind: 'trust', no: 8, endow: 10, mult: 3,
+    title: '信頼ゲーム', story_title: '名人の畑',
+    tagline: '預ければ3倍に育つ。でも、返すかどうかは名人しだい。',
+    color: '#4f8a3a',
+    hero: function () {
+      return S(P.sky('#cfe9ff', '#f1f8ff') + field(170) + FARMER({ x: 100, y: 108, s: 0.75, expr: 'think' }) + MEIJIN({ x: 300, y: 110, s: 0.75, expr: 'smug', flip: true }) +
+        turnips(160, 190, 5, 1) + T(200, 34, '名人の畑', { fs: 22 }));
+    },
+    story: [
+      function () {
+        return {
+          art: S(P.sky('#cfe9ff', '#f1f8ff') + P.floor(176, '#c7a17a') + FARMER({ x: 130, y: 110, s: 0.85, expr: 'happy' }) + turnips(200, 120, 10, 1.1) +
+            T(200, 36, '種かぶ 10個', { fs: 20 })),
+          text: 'あなた（ウサギ）は、春に<b>種かぶを10個</b>持っている。そのまま持っていれば、秋には10個ぶんの価値のまま。'
+        };
+      },
+      function () {
+        return {
+          art: S(P.sky('#cfe9ff', '#f1f8ff') + field(160) + MEIJIN({ x: 110, y: 100, s: 0.85, expr: 'smug', arms: 'up' }) + turnips(200, 170, 15, 1) +
+            T(300, 60, '×3！', { fs: 30, fill: '#4f8a3a' })),
+          text: '隣村の<b>畑の名人・タヌキのゲンゾウ</b>に預けると、名人の畑で<b>3倍</b>に育つ。1個預ければ、秋には3個になる。'
+        };
+      },
+      function () {
+        return {
+          art: S(P.sky('#ffd9a8', '#fff2d6') + field(170) + MEIJIN({ x: 200, y: 108, s: 0.85, expr: 'think' }) +
+            B(40, 8, '返すかどうかは、ワシが決める', { fs: 14, to: [200, 74] }) + turnips(60, 186, 5, 1) + turnips(260, 186, 5, 1)),
+          text: 'ただし、収穫のうち<b>いくつ返すかは名人が自由に決める</b>。半分返すかもしれないし、<b>ひとつも返さない</b>かもしれない。約束も契約書もない。'
+        };
+      },
+      function () {
+        return {
+          art: S(P.sky('#cfe9ff', '#f1f8ff') + field(170) + FARMER({ x: 100, y: 108, s: 0.75, expr: 'think' }) + MEIJIN({ x: 300, y: 110, s: 0.75, expr: 'think', flip: true }) +
+            B(20, 8, '預ける側？', { fs: 14, think: true, to: [100, 72] }) + B(260, 8, '名人の側？', { fs: 14, think: true, to: [300, 74] })),
+          text: 'あなたがどちらの役になるかは、まだわからない。そこで<b>両方の役</b>を決めてもらう。①預ける側なら<b>何個預けるか</b>、②名人なら収穫の<b>何%を返すか</b>。'
+        };
+      }
+    ],
+    reasonQInvestor: 'なぜその個数を預けましたか？ 名人がどう返してくると思ったかも書いてください。',
+    reasonQTrustee: 'なぜその割合を返すことにしましたか？',
+    expectQ: '名人（ほかの参加者）は、収穫の何%を返してくれると思いますか？',
+    chars: { ME: FARMER, YOU: MEIJIN }, turnips: turnips, field: field
   };
 
   /* ---------- 結果の観点ラベル（AI分類） ---------- */
@@ -579,7 +713,7 @@
   };
 
   window.GT_GAMES = GAMES;
-  window.GT_ORDER = ['pd', 'bos', 'stag', 'chicken', 'volunteer', 'ultimatum', 'ipd_unknown', 'ipd_known'];
+  window.GT_ORDER = ['pd', 'bos', 'stag', 'chicken', 'volunteer', 'ultimatum', 'dictator', 'trust', 'ipd_unknown', 'ipd_known'];
   window.GT_LABELS = LABELS;
   window.GT_CHARS = { ROOMIES: ROOMIES, CHEF_ME: CHEF_ME, GEN: GEN, PIRATE_ME: PIRATE_ME, PIRATE_YOU: PIRATE_YOU };
 })();

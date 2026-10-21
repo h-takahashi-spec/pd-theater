@@ -3,7 +3,7 @@
  * ============================================================ */
 (function () {
   var U = GT.U, API = GT.API, CFG = GT.CFG, G = window.GT_GAMES, L = window.GT_LABELS;
-  var TABS = [['all', '全体'], ['pd', '囚人のジレンマ'], ['bos', '男女の争い'], ['stag', '鹿狩り'], ['chicken', 'チキン'], ['volunteer', 'ボランティア'], ['ultimatum', '最後通牒'], ['ipd', '繰り返しPD']];
+  var TABS = [['all', '全体'], ['pd', '囚人のジレンマ'], ['bos', '男女の争い'], ['stag', '鹿狩り'], ['chicken', 'チキン'], ['volunteer', 'ボランティア'], ['ultimatum', '最後通牒'], ['dictator', '独裁者'], ['trust', '信頼'], ['ipd', '繰り返しPD'], ['nashquiz', 'ナッシュ課題']];
   var LKEYS = ['rational', 'emotional', 'normative', 'bias', 'unclear'];
   var S = { tab: U.qs('game') || 'all', rows: [], pw: '', teacher: false, busy: false, filt: { choice: '', label: '', q: '', role: '' }, firstOnly: false };
   try { S.pw = sessionStorage.getItem('gt_pw') || ''; } catch (e) { }
@@ -14,9 +14,10 @@
 
   function tabs() {
     U.$('tabs').innerHTML = TABS.map(function (t) {
-      return '<a class="tab' + (t[0] === S.tab ? ' on' : '') + '" href="?game=' + t[0] + '">' + t[1] + '</a>';
+      var lock = S.open && t[0] !== 'all' && S.open.indexOf(t[0]) < 0;
+      return '<a class="tab' + (t[0] === S.tab ? ' on' : '') + '" href="?game=' + t[0] + '"' + (lock ? ' title="まだ開放していません"' : '') + '>' + (lock ? '🔒 ' : '') + t[1] + '</a>';
     }).join('');
-    var col = S.tab === 'all' ? '#2b2622' : S.tab === 'ipd' ? G.ipd_known.color : G[S.tab].color;
+    var col = S.tab === 'all' ? '#2b2622' : S.tab === 'ipd' ? G.ipd_known.color : S.tab === 'nashquiz' ? '#2f6fb0' : G[S.tab].color;
     document.documentElement.style.setProperty('--gc', col);
   }
 
@@ -150,7 +151,7 @@
     var tsel = S.teacher ? '<select data-relabel="' + U.esc(r.id) + '" class="small" style="font:inherit;font-size:.8rem;border:1.5px solid var(--ink);border-radius:6px"><option value="">先生の修正なし</option>' +
       LKEYS.map(function (k) { return '<option value="' + k + '"' + (r.teacherLabel === k ? ' selected' : '') + '>' + L[k].ja + '</option>'; }).join('') + '</select>' : '';
     var who = U.esc(r.nickname || '名無し') + (S.teacher && r.studentId ? ' <span class="muted">' + U.esc(r.studentId) + '</span>' : '') + (r.sample ? ' <span class="muted">(サンプル)</span>' : '');
-    var roleTxt = r.game === 'ultimatum' ? (r.role === 'proposer' ? '分ける側：' : '受け取る側：') : r.game === 'bos' ? (r.role === 'A' ? '[フェス派] ' : '[美術館派] ') : r.game === 'ipd_known' ? '[回数既知] ' : r.game === 'ipd_unknown' ? '[回数未知] ' : '';
+    var roleTxt = r.game === 'trust' ? (r.role === 'investor' ? '預ける側：' : '名人の側：') : r.game === 'ultimatum' ? (r.role === 'proposer' ? '分ける側：' : '受け取る側：') : r.game === 'bos' ? (r.role === 'A' ? '[フェス派] ' : '[美術館派] ') : r.game === 'ipd_known' ? '[回数既知] ' : r.game === 'ipd_unknown' ? '[回数未知] ' : '';
     return '<article class="rc"><div class="hd"><span>' + who + '</span><span>' + U.fmtTime(r.ts) + '</span></div>' +
       '<div class="ch">' + roleTxt + U.esc(r.choiceLabel || r.choice) + (r.expectLabel ? '<span class="muted small">（予想：' + U.esc(r.expectLabel) + '）</span>' : '') + '</div>' +
       '<div class="tx">' + U.esc(r.reason) + '</div>' + ai + tsel + '</article>';
@@ -296,11 +297,122 @@
     return h;
   }
 
+  /* ---------------- 独裁者ゲーム ---------------- */
+  var mean = function (a) { return a.length ? a.reduce(function (x, y) { return x + y; }, 0) / a.length : NaN; };
+  function viewDictator() {
+    var g = G.dictator, rows = rowsOf('dictator'), n = rows.length;
+    var h = '<section class="panel"><span class="kicker">GAME ' + g.no + '</span><h1 class="title-xl">' + g.title + '<span class="small">「' + g.story_title + '」</span></h1>';
+    if (!n) return h + '<p>まだ回答がありません。</p></section>';
+    var gives = rows.map(function (r) { return +r.choice; });
+    var exps = rows.map(function (r) { return +r.expect; }).filter(function (x) { return !isNaN(x); });
+    h += '<div class="stats">' + stat(n + '人', '回答者') + stat(Math.round(mean(gives)) + '円', '相手に渡した平均（1000円中）') +
+      stat(U.pct(gives.filter(function (x) { return x === 0; }).length / n), '0円（全部自分）') + stat(U.pct(gives.filter(function (x) { return x === 500; }).length / n), 'ちょうど半分') +
+      stat(Math.round(mean(exps)) + '円', '「ほかの人の平均」の予想') + '</div>';
+    var bins = []; for (var b = 0; b <= g.total; b += 100) bins.push(b);
+    var binLabel = function (b) { return b === g.total ? b + '円' : b + '〜' + (b + 50) + '円'; };
+    var inBin = function (v, b) { return v >= b && v < b + 100 || (b === g.total && v === b); };
+    h += '<div class="grid2" style="margin-top:14px"><div><h3 class="title-l">相手に渡した額</h3>' + bars(bins.map(function (b) { return { label: binLabel(b), n: gives.filter(function (v) { return inBin(v, b); }).length }; }), n) + '</div>' +
+      '<div><h3 class="title-l">「ほかの人の平均」の予想</h3>' + bars(bins.map(function (b) { return { label: binLabel(b), n: exps.filter(function (v) { return inBin(v, b); }).length, color: '#8a8378' }; }), exps.length) + '</div></div>';
+    // 最後通牒ゲームとの比較
+    var U1 = rowsOf('ultimatum', 'proposer');
+    var offerOf = {}; U1.forEach(function (r) { offerOf[r.pid] = +r.choice; });
+    var pairs = rows.filter(function (r) { return offerOf[r.pid] != null; }).map(function (r) { return { d: +r.choice, u: offerOf[r.pid] }; });
+    h += '<h3 class="title-l" style="margin-top:16px">最後通牒ゲームと比べると</h3>';
+    if (U1.length) {
+      var less = pairs.filter(function (p) { return p.d < p.u; }).length;
+      h += '<div class="stats">' + stat(Math.round(mean(U1.map(function (r) { return +r.choice; }))) + '円', '最後通牒で相手に渡した平均（断られうる）') +
+        stat(Math.round(mean(gives)) + '円', '独裁者で相手に渡した平均（断られない）') +
+        stat(pairs.length ? Math.round(mean(pairs.map(function (p) { return p.u - p.d; }))) + '円' : '—', '両方やった人の「最後通牒−独裁者」の平均（' + pairs.length + '人）') +
+        stat(pairs.length ? U.pct(less / pairs.length) : '—', '両方やった人のうち、独裁者のほうが少なかった人') + '</div>' +
+        '<p class="small">最後通牒ゲームで渡す額には「断られたくない」という<b>戦略</b>の分が含まれます。断られる心配のない独裁者ゲームでの額は、それを除いた<b>純粋に相手に渡したい分</b>（利他性や公平の規範）と考えられます。その差が「戦略の分」です。</p>';
+    } else h += '<p class="muted small">最後通牒ゲームの回答がまだないので比較できません。</p>';
+    h += '</section>';
+    h += aiSection(rows, [{ label: '0円', rows: rows.filter(function (r) { return +r.choice === 0; }) }, { label: '1〜450円', rows: rows.filter(function (r) { return +r.choice > 0 && +r.choice < 500; }) }, { label: '500円以上', rows: rows.filter(function (r) { return +r.choice >= 500; }) }]);
+    h += reasonsSection(rows, [['dictator', 'すべて']], { choiceKey: function (r) { return r.role; } });
+    return h;
+  }
+
+  /* ---------------- 信頼ゲーム ---------------- */
+  function viewTrust() {
+    var g = G.trust, IV = rowsOf('trust', 'investor'), TR = rowsOf('trust', 'trustee');
+    var h = '<section class="panel"><span class="kicker">GAME ' + g.no + '</span><h1 class="title-xl">' + g.title + '<span class="small">「' + g.story_title + '」</span></h1>';
+    if (!IV.length && !TR.length) return h + '<p>まだ回答がありません。</p></section>';
+    var sends = IV.map(function (r) { return +r.choice; }), rets = TR.map(function (r) { return +r.choice; });
+    var exps = IV.map(function (r) { return +r.expect; }).filter(function (x) { return !isNaN(x); });
+    // ランダムに組んだときの、預ける側の平均の手もち
+    var pay = function (x) { return rets.length ? mean(rets.map(function (r) { return g.endow - x + Math.round(x * g.mult * r / 100); })) : NaN; };
+    var pairAvg = sends.length && rets.length ? mean(sends.map(pay)) : NaN;
+    h += '<div class="stats">' + stat(IV.length + '人', '回答者') + stat(mean(sends).toFixed(1) + '個', '預けた平均（10個中）') +
+      stat(Math.round(mean(rets)) + '%', '名人として返した平均') + stat(Math.round(mean(exps)) + '%', '名人が返す割合の予想（平均）') +
+      stat('33%', 'これより多く返してもらえれば、預けたほうが得になる分かれ目') +
+      stat(isNaN(pairAvg) ? '—' : pairAvg.toFixed(1) + '個', 'ランダムに組んだときの、預ける側の平均の手もち（預けなければ10個）') + '</div>';
+    h += '<div class="grid2" style="margin-top:14px"><div><h3 class="title-l">預けた数</h3>' +
+      bars([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (k) { return { label: k + '個', n: sends.filter(function (v) { return v === k; }).length }; }), sends.length) + '</div>' +
+      '<div><h3 class="title-l">名人として返した割合</h3>' +
+      bars([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(function (k) { return { label: k + '%', n: rets.filter(function (v) { return v === k; }).length, color: '#8a8378' }; }), rets.length) + '</div></div>';
+    h += '<h3 class="title-l" style="margin-top:16px">何個預けると得だった？（このクラスの名人たちが相手なら）</h3>' +
+      '<div class="stats">' + [0, 5, 10].map(function (x) { return stat(isNaN(pay(x)) ? '—' : pay(x).toFixed(1) + '個', x + '個預けたときの平均の手もち'); }).join('') + '</div>' +
+      '<p class="small muted">お金（かぶ）だけを考える人どうしなら、名人は0%返し、それを見越して誰も預けない――が均衡です。でも全員が預けて半分返せば、ふたりとも15個になります。</p>';
+    // 予想と預けた数／信頼と互恵
+    var grp = function (lo, hi) { var rs = IV.filter(function (r) { var e = +r.expect; return e >= lo && e <= hi; }); return { n: rs.length, v: rs.length ? mean(rs.map(function (r) { return +r.choice; })) : NaN }; };
+    var retOf = {}; TR.forEach(function (r) { retOf[r.pid] = +r.choice; });
+    var both = IV.filter(function (r) { return retOf[r.pid] != null; });
+    var grp2 = function (lo, hi) { var rs = both.filter(function (r) { var x = +r.choice; return x >= lo && x <= hi; }); return { n: rs.length, v: rs.length ? mean(rs.map(function (r) { return retOf[r.pid]; })) : NaN }; };
+    h += '<div class="grid2" style="margin-top:16px"><div><h3 class="title-l">信頼は「予想」から？</h3>' +
+      bars([[0, 20], [30, 40], [50, 100]].map(function (b) { var q = grp(b[0], b[1]); return { label: b[0] + '〜' + b[1] + '%返すと予想（' + q.n + '）', n: isNaN(q.v) ? 0 : Math.round(q.v * 10) }; }), 100, { raw: true }).replace(/<span class="num">(\d+)<\/span>/g, function (m, v) { return '<span class="num">' + (v / 10).toFixed(1) + '個</span>'; }) +
+      '<p class="small muted">名人が多く返すと予想した人ほど、多く預けたか。</p></div>' +
+      '<div><h3 class="title-l">信頼する人は、信頼に応える？</h3>' +
+      bars([[0, 3], [4, 6], [7, 10]].map(function (b) { var q = grp2(b[0], b[1]); return { label: b[0] + '〜' + b[1] + '個預けた人（' + q.n + '）', n: isNaN(q.v) ? 0 : Math.round(q.v) }; }), 100, { raw: true }).replace(/<span class="num">(\d+)<\/span>/g, '<span class="num">$1%</span>') +
+      '<p class="small muted">同じ人の「預けた数」と「名人として返した割合」の関係。</p></div></div></section>';
+    var all = IV.concat(TR);
+    h += aiSection(all, [{ label: '預ける側', rows: IV }, { label: '名人の側', rows: TR }]);
+    h += reasonsSection(all, [['investor', '預ける側の理由'], ['trustee', '名人の側の理由']], { choiceKey: function (r) { return r.role; } });
+    return h;
+  }
+
+  /* ---------------- ナッシュ均衡の課題 ---------------- */
+  function viewQuiz() {
+    var Qs = NQ.questions, all = S.rows.filter(function (r) { return r.game === 'nashquiz'; });
+    var h = '<section class="panel"><span class="kicker">課題</span><h1 class="title-xl">ナッシュ均衡の課題<span class="small">（純粋戦略5問・混合戦略3問）</span></h1>';
+    if (!all.length) return h + '<p>まだ提出がありません。</p></section>';
+    // 各自の1回目の提出で集計
+    var first = {}; all.slice().sort(function (a, b) { return String(a.ts).localeCompare(String(b.ts)); }).forEach(function (r) { if (!first[r.pid]) first[r.pid] = r; });
+    var rows = Object.keys(first).map(function (k) { return first[k]; }), n = rows.length;
+    var sc = rows.map(function (r) { return +r.choice || 0; });
+    var cor = function (r, i) { var d = detOf(r); return d.correct ? +d.correct[i] : 0; };
+    h += '<div class="stats">' + stat(n + '人', '提出者（1回目で集計）') + stat((sc.reduce(function (a, b) { return a + b; }, 0) / n).toFixed(1) + '点', '平均点（8点満点）') +
+      stat(sc.filter(function (v) { return v === Qs.length; }).length + '人', '満点') + stat(all.length + '件', '提出の総数（再挑戦を含む）') + '</div>';
+    h += '<div class="grid2" style="margin-top:14px"><div><h3 class="title-l">問題ごとの正答率</h3>' +
+      bars(Qs.map(function (q, i) { return { label: '問' + q.no + (q.kind === 'pure' ? '（純粋）' : '（混合）'), n: rows.filter(function (r) { return cor(r, i); }).length, color: q.kind === 'pure' ? '#2f6fb0' : '#c2412d' }; }), n) + '</div>' +
+      '<div><h3 class="title-l">得点の分布</h3>' + bars([8, 7, 6, 5, 4, 3, 2, 1, 0].map(function (v) { return { label: v + '点', n: sc.filter(function (x) { return x === v; }).length, color: '#8a8378' }; }), n) + '</div></div>';
+    // よくある答え（純粋戦略）
+    var name = function (q, k) { var a = k.split(','); return 'A' + q.rows[+a[0]] + '・B' + q.cols[+a[1]]; };
+    h += '<h3 class="title-l" style="margin-top:16px">純粋戦略：よくある答え</h3><div class="reasons">';
+    Qs.forEach(function (q, i) {
+      if (q.kind !== 'pure') return;
+      var freq = {};
+      rows.forEach(function (r) { var a = (detOf(r).answers || {})[q.id] || {}; var key = a.none ? 'ない' : (a.cells && a.cells.length ? a.cells.slice().sort().map(function (k) { return name(q, k); }).join(' ＋ ') : '未回答'); freq[key] = (freq[key] || 0) + 1; });
+      var right = q.br.ne.length ? q.br.ne.map(function (k) { return name(q, k); }).join(' ＋ ') : 'ない';
+      h += '<article class="rc"><div class="ch">問' + q.no + '　正解：' + right + '</div>' + Object.keys(freq).sort(function (a, b) { return freq[b] - freq[a]; }).slice(0, 4).map(function (k) {
+        return '<div>' + (k === right ? '✅ ' : '・') + U.esc(k) + '　<b>' + freq[k] + '人</b></div>';
+      }).join('') + '</article>';
+    });
+    h += '</div></section>';
+    if (S.teacher) {
+      h += '<section class="panel"><h2 class="title-l">提出一覧（先生モード）</h2><div style="overflow-x:auto"><table class="matrix" style="table-layout:auto"><tr><th>学籍番号</th><th>ニックネーム</th><th>1回目</th><th>最新</th><th>提出回数</th>' + Qs.map(function (q) { return '<th>問' + q.no + '</th>'; }).join('') + '</tr>' +
+        rows.sort(function (a, b) { return String(a.studentId || '').localeCompare(String(b.studentId || '')); }).map(function (r) {
+          var mine = all.filter(function (x) { return x.pid === r.pid; }), last = mine.sort(function (a, b) { return String(b.ts).localeCompare(String(a.ts)); })[0];
+          return '<tr><td>' + U.esc(r.studentId || '') + '</td><td>' + U.esc(r.nickname) + '</td><td>' + r.choice + '点</td><td>' + last.choice + '点</td><td>' + mine.length + '</td>' + Qs.map(function (q, i) { return '<td>' + (cor(r, i) ? '○' : '×') + '</td>'; }).join('') + '</tr>';
+        }).join('') + '</table></div></section>';
+    }
+    return h;
+  }
+
   /* ---------------- 繰り返しPD ---------------- */
   function viewIPD() {
     var K = rowsOf('ipd').filter(function (r) { return r.game === 'ipd_known'; }), N = rowsOf('ipd').filter(function (r) { return r.game === 'ipd_unknown'; });
     var gk = G.ipd_known, gu = G.ipd_unknown;
-    var h = '<section class="panel"><span class="kicker">GAME 7・8</span><h1 class="title-xl">繰り返し囚人のジレンマ<span class="small">「ラーメン激戦区」</span></h1>';
+    var h = '<section class="panel"><span class="kicker">GAME 9・10</span><h1 class="title-xl">繰り返し囚人のジレンマ<span class="small">「ラーメン激戦区」</span></h1>';
     var allI = S.rows.filter(function (r) { return /^ipd_/.test(r.game); });
     var ordUK = allI.filter(function (r) { return r.game === 'ipd_known' && detOf(r).priorOther; }).length;
     var ordKU = allI.filter(function (r) { return r.game === 'ipd_unknown' && detOf(r).priorOther; }).length;
@@ -361,6 +473,12 @@
       if (g.kind === '2x2' || g.kind === 'volunteer') {
         var a0 = g.order[0];
         head = U.pct(rows.filter(function (r) { return r.choice === a0; }).length / (rows.length || 1)) + '<span class="small"> が「' + g.actions[a0].label + '」</span>';
+      } else if (g.kind === 'dictator') {
+        head = (rows.length ? Math.round(rows.reduce(function (a, r) { return a + (+r.choice); }, 0) / rows.length) : '—') + '円<span class="small"> 平均の渡した額</span>';
+      } else if (g.kind === 'trust') {
+        var IV = rows.filter(function (r) { return r.role === 'investor'; });
+        head = (IV.length ? (IV.reduce(function (a, r) { return a + (+r.choice); }, 0) / IV.length).toFixed(1) : '—') + '個<span class="small"> 平均の預けた数</span>';
+        n = IV.length;
       } else if (g.kind === 'ultimatum') {
         var P = rows.filter(function (r) { return r.role === 'proposer'; });
         head = (P.length ? Math.round(P.reduce(function (a, r) { return a + (+r.choice); }, 0) / P.length) : '—') + 'G<span class="small"> 平均の提案額</span>';
@@ -368,7 +486,7 @@
       } else {
         head = U.pct(rows.reduce(function (a, r) { return a + (+r.choice || 0); }, 0) / (rows.length || 1)) + '<span class="small"> 平均の協力率</span>';
       }
-      h += '<a class="ov" href="?game=' + key + '" style="--gc:' + g.color + '"><span class="kicker">GAME ' + (key === 'ipd' ? '7・8' : g.no) + '</span><h3>' + (key === 'ipd' ? '繰り返し囚人のジレンマ' : g.title) + '</h3>' +
+      h += '<a class="ov" href="?game=' + key + '" style="--gc:' + g.color + '"><span class="kicker">GAME ' + (key === 'ipd' ? '9・10' : g.no) + '</span><h3>' + (key === 'ipd' ? '繰り返し囚人のジレンマ' : g.title) + '</h3>' +
         '<div class="big">' + (rows.length ? head : '—') + '</div><div class="small muted">' + n + '人が回答</div>' +
         '<div class="bars" style="margin-top:6px">' + labelStack(rows, '理由の分類') + '</div></a>';
     });
@@ -388,6 +506,9 @@
     if (S.tab === 'all') h = viewAll();
     else if (S.tab === 'volunteer') h = viewVolunteer();
     else if (S.tab === 'ultimatum') h = viewUltimatum();
+    else if (S.tab === 'dictator') h = viewDictator();
+    else if (S.tab === 'trust') h = viewTrust();
+    else if (S.tab === 'nashquiz') h = viewQuiz();
     else if (S.tab === 'ipd') h = viewIPD();
     else h = view2x2(S.tab);
     U.$('view').innerHTML = h;
@@ -397,7 +518,34 @@
   }
 
   /* ---------------- 先生モード ---------------- */
+  /* ---------------- 課題の開放（先生モード） ---------------- */
+  function loadOpen() {
+    return API.get({ action: 'status' }).then(function (j) { S.open = j.open || []; tabs(); gatePanel(); }).catch(function () { });
+  }
+  function gatePanel() {
+    var el = U.$('gatePanel');
+    el.classList.toggle('hidden', !S.teacher);
+    if (!S.teacher || !S.open) return;
+    el.innerHTML = '<div class="filters" style="margin:10px 0 0"><b>課題の開放</b><span class="small muted">オンにした課題だけ、学生が遊べます（オフの課題はURLを開いても待ち画面になり、送信もできません）</span>' +
+      '<button class="btn ghost" id="openAll" style="padding:2px 12px;margin-left:auto">すべて開く</button><button class="btn ghost" id="closeAll" style="padding:2px 12px">すべて閉じる</button></div>' +
+      '<div class="gates">' + GT.GATES.map(function (g) {
+        var on = S.open.indexOf(g[0]) >= 0;
+        return '<label class="gate' + (on ? ' on' : '') + '"><span>' + U.esc(g[1]) + '<br><span class="small muted">' + (on ? '開放中' : '閉じています') + '</span></span>' +
+          '<span class="switch"><input type="checkbox" data-gate="' + g[0] + '"' + (on ? ' checked' : '') + ' aria-label="' + U.esc(g[1]) + 'を開放"><span></span></span></label>';
+      }).join('') + '</div>';
+    var set = function (body) {
+      el.querySelectorAll('input,button').forEach(function (x) { x.disabled = true; });
+      API.post(Object.assign({ action: 'setOpen', password: S.pw }, body)).then(function (j) {
+        S.open = j.open || []; tabs(); gatePanel(); msg('開放状態を保存しました。');
+      }).catch(function (e) { msg('保存できませんでした：' + e.message, true); gatePanel(); });
+    };
+    el.querySelectorAll('[data-gate]').forEach(function (cb) { cb.onchange = function () { set({ key: cb.dataset.gate, open: cb.checked }); }; });
+    U.$('openAll').onclick = function () { set({ all: true }); };
+    U.$('closeAll').onclick = function () { if (confirm('すべての課題を閉じますか？')) set({ all: false }); };
+  }
+
   function teacherUI() {
+    gatePanel();
     U.$('tLogin').classList.toggle('hidden', S.teacher);
     U.$('tTools').classList.toggle('hidden', !S.teacher);
   }
@@ -447,10 +595,11 @@
   U.$('reload').onclick = load;
 
   tabs();
+  loadOpen();
   if (S.pw) {
     API.post({ action: 'teacherRows', password: S.pw }).then(function (j) { S.teacher = true; S.rows = j.rows || []; teacherUI(); render(); }).catch(function () { S.pw = ''; load(); });
   } else load();
   teacherUI();
   var sec = CFG.RESULTS_REFRESH_SEC || 0;
-  if (sec > 0) setInterval(function () { if (U.$('auto').checked && !S.busy && !document.querySelector('.rc select:focus, [data-f]:focus')) load(); }, sec * 1000);
+  if (sec > 0) setInterval(function () { if (U.$('auto').checked && !S.busy && !document.querySelector('.rc select:focus, [data-f]:focus')) { load(); if (!S.teacher) loadOpen(); } }, sec * 1000);
 })();

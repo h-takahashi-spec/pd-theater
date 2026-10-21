@@ -35,7 +35,9 @@
   var BOT = {
     twoByTwo: function () { return { choice: U.pick(game.order), bot: true }; },             // コイン投げ（50%ずつ）
     volunteer: function () { return { choice: Math.random() < 0.5 ? 'V' : 'W', bot: true }; }, // 50%で名乗り出る
-    amount: function () { return { choice: String(50 * Math.floor(Math.random() * 11)), bot: true }; } // 0〜500Gを50G刻みで一様に
+    amount: function () { return { choice: String(50 * Math.floor(Math.random() * 11)), bot: true }; }, // 0〜500G（円）を50刻みで一様に
+    send: function () { return { choice: String(Math.floor(Math.random() * 11)), bot: true }; },           // 0〜10個を一様に
+    ret: function () { return { choice: String(10 * Math.floor(Math.random() * 11)), bot: true }; }          // 0〜100%を10%刻みで一様に
   };
 
   function show(html) { app.innerHTML = html; window.scrollTo({ top: 0, behavior: 'smooth' }); }
@@ -61,27 +63,91 @@
   }
   function okReason(id) { var t = U.$(id); return t && t.value.trim().length >= MIN; }
 
-  if (!game) return portal();
-  document.documentElement.style.setProperty('--gc', game.color);
-  U.$('resultsLink').href = 'results.html?game=' + (game.kind === 'ipd' || autoIPD ? 'ipd' : gid);
-  document.title = game.title + '｜' + (CFG.SITE_TITLE || 'ジレンマ劇場');
-  entry();
+  /* ---------- 課題の開放状態を確かめてから始める ---------- */
+  var OPEN = [];
+  function isOpen(id) { return OPEN.indexOf(GT.gateKey(id)) >= 0; }
+  function loadStatus() { return API.get({ action: 'status' }).then(function (j) { OPEN = j.open || []; return OPEN; }); }
+  function statusError(err) {
+    show('<div class="panel"><h2 class="title-l">サーバーにつながりませんでした</h2><p>' + U.esc(err.message) + '</p><div class="btnrow end"><button class="btn primary" id="retry">もう一度</button></div></div>');
+    U.$('retry').onclick = boot;
+  }
+  var watcher = null;
+  function watch(o) { if (watcher) watcher.stop(); watcher = GT.watchOpen(o).start(OPEN); return watcher; }
+  function nameOf(key) { var g = GT.GATES.filter(function (x) { return x[0] === key; })[0]; return g ? g[1].replace(/（.*?）/, '') : key; }
+  function boot() {
+    show('<div class="panel"><p class="center muted">読み込み中…</p></div>');
+    loadStatus().then(function () {
+      if (!game) return portal();
+      document.documentElement.style.setProperty('--gc', game.color);
+      U.$('resultsLink').href = 'results.html?game=' + (game.kind === 'ipd' || autoIPD ? 'ipd' : gid);
+      document.title = game.title + '｜' + (CFG.SITE_TITLE || 'ジレンマ劇場');
+      if (isOpen(gid)) entry(); else locked();
+    }).catch(statusError);
+  }
+  /** 閉じている課題：待ち画面。先生が開くと、何もしなくても入口へ進む */
+  function locked() {
+    var art = window.ART.svg('<rect width="400" height="240" fill="#efe6d4"/>' +
+      '<g opacity=".35">' + game.hero().replace(/^<svg[^>]*>|<\/svg>$/g, '') + '</g>' +
+      '<g transform="translate(200 128)"><path d="M-26 -18 v-18 a26 26 0 0 1 52 0 v18" fill="none" stroke="#2b2622" stroke-width="10" stroke-linecap="round"/>' +
+      '<rect x="-40" y="-20" width="80" height="64" rx="10" fill="#f2c14e" stroke="#2b2622" stroke-width="4"/>' +
+      '<circle cx="0" cy="6" r="8" fill="#2b2622"/><rect x="-3" y="8" width="6" height="18" fill="#2b2622"/></g>');
+    show('<div class="panel" id="lockPanel">' + art +
+      '<div style="margin-top:14px"><span class="kicker">GAME ' + game.no + '</span></div>' +
+      '<h1 class="title-xl">' + U.esc(game.title) + '</h1>' +
+      '<p><b>この課題は、まだ開いていません。</b><br>先生が開くと、<b>この画面のまま自動で</b>始まります。ページを更新する必要はありません。</p>' +
+      '<p class="small muted" id="lockMsg"><span class="pulse"></span>先生の合図を待っています…</p>' +
+      '<div class="btnrow"><a class="btn ghost" href="index.html">ゲーム一覧へ</a><button class="btn ghost" id="recheck">いま確認する</button></div></div>');
+    var w = watch({
+      needed: function () { return !!U.$('lockPanel'); },
+      onTick: function (open, ok) { var m = U.$('lockMsg'); if (m) m.innerHTML = ok ? '<span class="pulse"></span>先生の合図を待っています…（最終確認 ' + new Date().toLocaleTimeString('ja-JP') + '）' : '確認できませんでした。通信状態を確かめてください（自動で再確認します）。'; },
+      onChange: function (open) { OPEN = open; if (isOpen(gid)) { w.stop(); GT.toast('「' + game.title + '」が開きました！'); entry(); } }
+    });
+    U.$('recheck').onclick = function () { w.check(); };
+  }
+  boot();
 
   /* ======================== ポータル ======================== */
+  function cardLock(a, op, justOpened) {
+    a.classList.toggle('locked', !op);
+    if (op) { a.removeAttribute('aria-disabled'); a.removeAttribute('tabindex'); } else { a.setAttribute('aria-disabled', 'true'); a.setAttribute('tabindex', '-1'); }
+    var b = a.querySelector('.lockbadge'); if (b) b.style.display = op ? 'none' : '';
+    if (justOpened) { a.classList.remove('opened'); void a.offsetWidth; a.classList.add('opened'); }
+  }
   function portal() {
     var h = '<h1 class="hero-title">' + U.esc(CFG.SITE_TITLE || 'ジレンマ劇場') + '</h1>' +
-      '<p class="hero-sub">8つの物語で、協力・信頼・駆け引きを体験しよう。先生に指定されたゲームを選んでください。</p>' +
+      '<p class="hero-sub">10の物語で、協力・信頼・駆け引きを体験しよう。先生に指定されたゲームを選んでください。<br><b id="noneMsg"' + (OPEN.length ? ' style="display:none"' : '') + '>いま開いている課題はありません。先生が開くと、ここに自動で表示されます。</b></p>' +
       '<div class="games">';
     ORDER.forEach(function (id) {
       if (id === 'ipd_known') return;
       var g = id === 'ipd_unknown' ? window.GT_IPD_SET : G[id];
-      h += '<a class="gcard" href="?game=' + (id === 'ipd_unknown' ? 'ipd' : id) + '" style="--gc:' + g.color + '">' + g.hero() +
-        '<div class="body"><span class="no" style="background:' + g.color + '">GAME ' + g.no + '</span>' +
+      h += '<a class="gcard" data-gate="' + GT.gateKey(id) + '" href="?game=' + (id === 'ipd_unknown' ? 'ipd' : id) + '" style="--gc:' + g.color + '">' + g.hero() +
+        '<div class="body"><span class="no" style="background:' + g.color + '">GAME ' + g.no + '</span><span class="lockbadge">🔒 まだ開いていません</span>' +
         '<h3>' + U.esc(g.title) + (g.subtitle ? '<br><span class="small">（' + U.esc(g.subtitle) + '）</span>' : '') + '</h3>' +
         '<div class="st">「' + U.esc(g.story_title) + '」</div><div class="tg">' + U.esc(g.tagline) + '</div></div></a>';
     });
-    h += '</div><p class="center small muted" style="margin-top:22px">各ゲームのURL：<code>index.html?game=pd</code> のように <code>?game=</code> のあとにID（' + ORDER.join(' / ') + '）をつけます。繰り返しPDは <code>?game=ipd</code> にすると、2つの条件の順番を学籍番号で半々に振り分けます。</p>';
+    h += '</div>';
+    h += '<h2 class="title-l" style="margin-top:28px">課題</h2><div class="games"><a class="gcard" data-gate="nashquiz" href="quiz.html" style="--gc:#2f6fb0">' +
+      '<div class="body"><span class="no" style="background:#2f6fb0">課題</span><span class="lockbadge">🔒 まだ開いていません</span>' +
+      '<h3>ナッシュ均衡の課題</h3><div class="st">純粋戦略 5問・混合戦略 3問</div><div class="tg">利得表からナッシュ均衡を求めよう。</div></div></a></div>';
+    h += '<p class="center small muted" style="margin-top:22px">各ゲームのURL：<code>index.html?game=pd</code> のように <code>?game=</code> のあとにID（' + ORDER.join(' / ') + '）をつけます。繰り返しPDは <code>?game=ipd</code> にすると、2つの条件の順番を学籍番号で半々に振り分けます。</p>';
     show(h);
+    var apply = function (prev) {
+      var opened = [];
+      app.querySelectorAll('a.gcard[data-gate]').forEach(function (a) {
+        var k = a.dataset.gate, op = isOpen(k), was = prev ? prev.indexOf(k) >= 0 : op;
+        if (op && !was) opened.push(k);
+        cardLock(a, op, op && !was);
+      });
+      U.$('noneMsg').style.display = OPEN.length ? 'none' : '';
+      opened.forEach(function (k) { GT.toast('🔓「' + nameOf(k) + '」が開きました！'); });
+    };
+    apply(null);
+    // 鍵のかかったカードがある間だけ見張る（閉じたことも反映するため、全部開いていても間隔をあけて確認）
+    watch({
+      needed: function () { return !!app.querySelector('a.gcard[data-gate]'); },
+      slow: function () { return !app.querySelector('a.gcard.locked'); }, // 全部開いたら間隔を延ばす
+      onChange: function (open, prev) { OPEN = open; apply(prev); }
+    });
   }
 
   /* ======================== 入口（学籍番号・ニックネーム） ======================== */
@@ -166,6 +232,14 @@
         '<p class="small muted">5人が同時に、相談なしで決めます。誰か1人でも名乗り出ればゴキブリは退治されます。</p>';
     } else if (game.kind === 'ultimatum') {
       body = '<div class="note">宝は <b>1000ゴールド</b>。<br>① <b>分ける側</b>は、相手にいくら渡すかを提案する（' + game.step + 'G単位）。<br>② <b>受け取る側</b>は「乗る」か「断る」だけ。断ると宝は海へ（ふたりとも0G）。<br>あなたは<b>両方の役</b>について決めます。結果は、ほかの参加者とランダムに組み合わせて判定します。</div>';
+    } else if (game.kind === 'dictator') {
+      body = '<div class="note">賞品は <b>1000円分のお食事券</b>。<br>回したあなたが、ペアの相手に<b>いくら渡すか</b>を決める（' + game.step + '円単位、0円でもよい）。<br>相手は<b>断れません</b>。あなたが渡した額をそのまま受け取ります。<br>結果は、ほかの参加者とランダムにペアを作って判定します（あなたが「受け取る側」になる場合もあります）。</div>';
+    } else if (game.kind === 'trust') {
+      body = '<div class="note">あなたは<b>種かぶ10個</b>を持っている。<br>① <b>預ける側</b>：名人に何個預けるかを決める（0〜10個）。預けた分は畑で<b>3倍</b>になる。<br>② <b>名人の側</b>：育った収穫のうち<b>何%を返すか</b>を決める（0〜100%）。<br>あなたは<b>両方の役</b>について決めます。結果は、ほかの参加者とランダムに組み合わせて判定します。</div>' +
+        '<table class="matrix" style="margin-top:10px"><tr><th class="corner">例</th><th>預ける側の最後の手もち</th><th>名人の手もち</th></tr>' +
+        '<tr><th>10個預けて<br>50%返す</th><td class="best"><span class="me">15個</span></td><td><span class="me">15個</span></td></tr>' +
+        '<tr><th>10個預けて<br>0%返す</th><td class="worst"><span class="me">0個</span></td><td><span class="me">30個</span></td></tr>' +
+        '<tr><th>預けない</th><td><span class="me">10個</span></td><td><span class="me">0個</span></td></tr></table>';
     } else if (game.kind === 'ipd') {
       body = matrixHTMLipd() + '<p class="note" style="margin-top:10px">' +
         (game.known ? '勝負は<b>ちょうど' + ctx.rounds + '週</b>。最後の週がいつかは、あなたもゲンさんも知っています。'
@@ -179,6 +253,8 @@
       if (game.kind === '2x2') decide2x2();
       else if (game.kind === 'volunteer') decideVolunteer();
       else if (game.kind === 'ultimatum') decideProposer();
+      else if (game.kind === 'dictator') decideDictator();
+      else if (game.kind === 'trust') decideInvestor();
       else if (game.kind === 'ipd') ipdStart();
     };
   }
@@ -245,7 +321,10 @@
       var wait = Math.max(0, 1300 - (Date.now() - t0));
       setTimeout(function () { done(res); }, wait);
     }).catch(function (err) {
-      show('<div class="panel"><h2 class="title-l">送信できませんでした</h2><p>' + U.esc(err.message) + '</p><p class="small muted">通信状態を確認して、もう一度ためしてください。</p><div class="btnrow end"><button class="btn primary" id="retry">もう一度送る</button></div></div>');
+      var gated = /受け付けていません/.test(err.message);
+      show('<div class="panel"><h2 class="title-l">' + (gated ? 'いまは送信できません' : '送信できませんでした') + '</h2><p>' + U.esc(err.message) + '</p>' +
+        '<p class="small muted">' + (gated ? '先生がこの課題を閉じたようです。あなたの選択と理由はこの画面に残っているので、再開されたら「もう一度送る」を押してください。' : '通信状態を確認して、もう一度ためしてください。') + '</p>' +
+        '<div class="btnrow end"><button class="btn primary" id="retry">もう一度送る</button></div></div>');
       U.$('retry').onclick = function () { send(rows, done); };
     });
   }
@@ -404,6 +483,134 @@
         '<div class="scorebox"><div>判定<b style="color:' + (acc2 ? 'var(--good)' : 'var(--bad)') + '">' + (acc2 ? '乗った' : '断った') + '</b></div><div>あなたの取り分<b>' + (acc2 ? o : 0) + 'G</b></div></div>';
     }
     show(h + afterLinks() + '</div>');
+  }
+
+  /* ======================== 独裁者ゲーム ======================== */
+  function slider(id, min, max, step, val, label) {
+    return '<input type="range" id="' + id + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + val + '" aria-label="' + label + '">';
+  }
+  function dictArt(give) {
+    var CH = game.chars, keep = game.total - give, P = window.ART.P;
+    return window.ART.svg(game.stall() +
+      CH.ME({ x: 90, y: 112, s: 0.7, expr: keep >= give ? 'happy' : 'normal' }) +
+      CH.YOU({ x: 310, y: 114, s: 0.7, expr: give === 0 ? 'sad' : give >= 500 ? 'happy' : 'normal', flip: true }) +
+      P.coins(90, 222, Math.max(keep > 0 ? 1 : 0, Math.round(keep / 100))) + P.coins(310, 222, Math.max(give > 0 ? 1 : 0, Math.round(give / 100))));
+  }
+  function decideDictator() {
+    var st = { give: 500, exp: 300, t1: false, t2: false };
+    show('<div class="panel"><span class="kicker">あなたの番</span><h2 class="title-l">ペアの相手に、いくら渡す？</h2>' +
+      '<div id="sa">' + dictArt(500) + '</div>' +
+      '<div class="split"><div>あなたの分<b id="keep">500円</b></div><div>相手に渡す<b id="give">500円</b></div></div>' +
+      slider('giveR', 0, game.total, game.step, 500, '相手に渡す金額') +
+      '<p class="small muted">相手は断れません。この額がそのまま相手のものになります。</p>' +
+      '<div class="qtitle"><span class="n">2</span>' + U.esc(game.expectQ) + '</div>' +
+      '<div class="split" style="grid-template-columns:1fr"><div>ほかの人の平均は<b id="expV">300円</b>くらい</div></div>' + slider('expR', 0, game.total, game.step, 300, 'ほかの人の平均の予想') +
+      '<div class="qtitle"><span class="n">3</span>理由</div>' + reasonBox('reason', game.reasonQ) +
+      '<div class="btnrow end"><button class="btn primary big" id="submit" disabled>この額で決定！</button></div></div>');
+    var check = function () { U.$('submit').disabled = !(st.t1 && st.t2 && okReason('reason')); };
+    U.$('giveR').oninput = U.$('giveR').onchange = function () {
+      st.t1 = true; st.give = +this.value;
+      U.$('keep').textContent = (game.total - st.give) + '円'; U.$('give').textContent = st.give + '円'; U.$('sa').innerHTML = dictArt(st.give); check();
+    };
+    U.$('expR').oninput = U.$('expR').onchange = function () { st.t2 = true; st.exp = +this.value; U.$('expV').textContent = st.exp + '円'; check(); };
+    bindCounter('reason', check);
+    U.$('submit').onclick = function () {
+      var row = baseRow({ role: 'dictator', choice: String(st.give), choiceLabel: '相手に' + st.give + '円渡す', expect: String(st.exp), expectLabel: 'ほかの人の平均は' + st.exp + '円', reason: U.$('reason').value.trim(), detail: { total: game.total, keep: game.total - st.give }, match: { k: 1, min: MINPOOL } });
+      send([row], function (res) { revealDictator(st, (res.partners && res.partners[0]) || []); });
+    };
+  }
+  function revealDictator(st, partners) {
+    var p = partners[0] || BOT.amount();
+    var got = +p.choice;
+    show('<div class="panel"><span class="kicker">結果発表</span>' +
+      '<p class="small muted" style="margin:6px 0 0">' + (p.bot ? 'まだ先に参加した人がいないので、あなたに渡す人は<b>コンピュータの代役</b>です（0〜500円からランダム）。' : '先に参加した人の中からランダムに選んだ1人を、もうひとつのペアの「回した人」として、あなたが受け取る額をめくります。') + '</p>' +
+      '<h3 class="title-l" style="margin-top:12px">① あなたが回した人のとき</h3>' + dictArt(st.give) +
+      '<div class="scorebox"><div>あなたの分<b>' + (game.total - st.give) + '円</b></div><div>相手が受け取った額<b>' + st.give + '円</b></div></div>' +
+      '<h3 class="title-l" style="margin-top:16px">② あなたが受け取る側のとき</h3>' +
+      '<div class="reveal"><div class="rcard static"><div class="inner"><div class="face back"><span class="who">回した人' + (p.bot ? '（代役）' : '') + 'があなたに渡した額</span><span class="act" id="gotTxt">？</span></div></div></div></div>' +
+      '<p id="gotMsg" style="opacity:0;transition:opacity .5s"></p>' + afterLinks() + '</div>');
+    setTimeout(function () {
+      U.$('gotTxt').textContent = got + '円';
+      U.$('gotMsg').textContent = got === 0 ? '何ももらえなかった。でも、文句は言えないきまりだ。' : got >= 500 ? '半分以上も！ 知らない人なのに、ずいぶん気前がいい。' : 'ちょっぴりおすそわけ。知らない人からの思いがけない贈り物。';
+      U.$('gotMsg').style.opacity = 1;
+    }, 900);
+  }
+
+  /* ======================== 信頼ゲーム ======================== */
+  var tr = {};
+  function trustArt(sent, retPct) {
+    var CH = game.chars, P = window.ART.P, harvest = sent * game.mult;
+    var back = retPct == null ? 0 : Math.round(harvest * retPct / 100);
+    return window.ART.svg(P.sky('#cfe9ff', '#f1f8ff') + game.field(176) +
+      CH.ME({ x: 80, y: 100, s: 0.65, expr: retPct == null ? 'think' : back > sent ? 'happy' : back < sent ? 'sad' : 'normal' }) +
+      CH.YOU({ x: 320, y: 102, s: 0.65, expr: 'smug', flip: true }) +
+      game.turnips(20, 186, Math.min(10, game.endow - sent + (retPct == null ? 0 : back)), 0.9) +
+      game.turnips(230, 186, Math.min(10, retPct == null ? harvest : harvest - back), 0.9) +
+      window.ART.caption(200, 60, sent + '個 → ' + harvest + '個', { fs: 18, fill: '#4f8a3a' }));
+  }
+  function decideInvestor() {
+    var st = { sent: 5, exp: 50, t1: false, t2: false };
+    show('<div class="panel"><span class="kicker">役① 預ける側</span><h2 class="title-l">名人に、種かぶを何個預ける？</h2>' +
+      '<div id="sa">' + trustArt(5) + '</div>' +
+      '<div class="split"><div>手もとに残す<b id="keep">5個</b></div><div>名人に預ける<b id="sent">5個</b><span class="small">畑で <b id="hv" style="display:inline;font-size:1rem">15個</b> に</span></div></div>' +
+      slider('sentR', 0, game.endow, 1, 5, '預ける個数') +
+      '<div class="qtitle"><span class="n">2</span>' + U.esc(game.expectQ) + '</div>' +
+      '<div class="split" style="grid-template-columns:1fr"><div>収穫の<b id="expV">50%</b>くらい返してくれる</div></div>' + slider('expR', 0, 100, 10, 50, '返してくれる割合の予想') +
+      '<div class="qtitle"><span class="n">3</span>理由</div>' + reasonBox('reason', game.reasonQInvestor) +
+      '<div class="btnrow end"><button class="btn primary big" id="next" disabled>名人の役へ ▶</button></div></div>');
+    var check = function () { U.$('next').disabled = !(st.t1 && st.t2 && okReason('reason')); };
+    U.$('sentR').oninput = U.$('sentR').onchange = function () {
+      st.t1 = true; st.sent = +this.value;
+      U.$('keep').textContent = (game.endow - st.sent) + '個'; U.$('sent').textContent = st.sent + '個'; U.$('hv').textContent = (st.sent * game.mult) + '個';
+      U.$('sa').innerHTML = trustArt(st.sent); check();
+    };
+    U.$('expR').oninput = U.$('expR').onchange = function () { st.t2 = true; st.exp = +this.value; U.$('expV').textContent = st.exp + '%'; check(); };
+    bindCounter('reason', check);
+    U.$('next').onclick = function () { tr = { sent: st.sent, exp: st.exp, reasonI: U.$('reason').value.trim() }; decideTrustee(); };
+  }
+  function decideTrustee() {
+    var r = 50, touched = false;
+    var table = function (pct) {
+      return '<table class="matrix"><tr><th class="corner">預けられた数</th><th>収穫</th><th>返す</th><th>名人に残る</th></tr>' + [2, 5, 10].map(function (x) {
+        var h = x * game.mult, b = Math.round(h * pct / 100);
+        return '<tr><th>' + x + '個</th><td>' + h + '個</td><td><span class="me">' + b + '個</span></td><td>' + (h - b) + '個</td></tr>';
+      }).join('') + '</table>';
+    };
+    show('<div class="panel"><span class="kicker">役② 名人の側</span><h2 class="title-l">収穫の何%を返す？</h2>' +
+      '<div class="split" style="grid-template-columns:1fr"><div>収穫の<b id="retV">50%</b>を返す</div></div>' + slider('retR', 0, 100, 10, 50, '返す割合') +
+      '<div id="tbl">' + table(50) + '</div>' +
+      '<p class="small muted">相手が何個預けてきても、収穫のこの割合を返します（端数は四捨五入）。</p>' +
+      reasonBox('reason2', game.reasonQTrustee) +
+      '<div class="btnrow"><button class="btn ghost" id="back">◀ 預ける側にもどる</button><button class="btn primary big" id="submit" disabled>決定！</button></div></div>');
+    var check = function () { U.$('submit').disabled = !(touched && okReason('reason2')); };
+    U.$('retR').oninput = U.$('retR').onchange = function () { touched = true; r = +this.value; U.$('retV').textContent = r + '%'; U.$('tbl').innerHTML = table(r); check(); };
+    bindCounter('reason2', check);
+    U.$('back').onclick = decideInvestor;
+    U.$('submit').onclick = function () {
+      tr.ret = r;
+      var rows = [
+        baseRow({ role: 'investor', choice: String(tr.sent), choiceLabel: tr.sent + '個預ける', expect: String(tr.exp), expectLabel: '名人は' + tr.exp + '%返すと予想', reason: tr.reasonI, detail: { endow: game.endow, mult: game.mult }, match: { role: 'trustee', k: 1, min: MINPOOL } }),
+        baseRow({ role: 'trustee', choice: String(r), choiceLabel: '収穫の' + r + '%を返す', expect: '', expectLabel: '', reason: U.$('reason2').value.trim(), detail: { endow: game.endow, mult: game.mult }, match: { role: 'investor', k: 1, min: MINPOOL } })
+      ];
+      send(rows, function (res) { revealTrust((res.partners || [])[0] || [], (res.partners || [])[1] || []); });
+    };
+  }
+  function revealTrust(trP, invP) {
+    var t = trP[0] || BOT.ret(), iv = invP[0] || BOT.send();
+    var rp = +t.choice, h1 = tr.sent * game.mult, b1 = Math.round(h1 * rp / 100), mine1 = game.endow - tr.sent + b1;
+    var x2 = +iv.choice, h2 = x2 * game.mult, b2 = Math.round(h2 * tr.ret / 100);
+    var anyBot = t.bot || iv.bot;
+    show('<div class="panel"><span class="kicker">結果発表</span><p class="small muted" style="margin:6px 0 0">' +
+      (anyBot ? 'まだ反対の役の人が先に参加していない場合は、<b>コンピュータの代役</b>が相手です（代役の預ける数は0〜10個、返す割合は0〜100%からランダム）。' : '先に参加した人の中から、反対の役をランダムに組み合わせました。') + '</p>' +
+      '<h3 class="title-l" style="margin-top:12px">① あなたが預ける側のとき</h3>' + trustArt(tr.sent, rp) +
+      '<p>あなたは <b>' + tr.sent + '個</b> 預けた → 畑で <b>' + h1 + '個</b> に。名人' + (t.bot ? '（代役）' : '') + 'は収穫の <b>' + rp + '%</b>（' + b1 + '個）を返してくれた。' +
+      (tr.sent === 0 ? '' : '（あなたの予想は ' + tr.exp + '%）') + '</p>' +
+      '<div class="scorebox"><div>あなたの最後の手もち<b>' + mine1 + '個</b></div><div>預けなかった場合<b>' + game.endow + '個</b></div></div>' +
+      '<p class="small">' + (tr.sent === 0 ? '預けなかったので、種かぶは10個のまま。' : mine1 > game.endow ? '信じて預けたぶん、得をした！' : mine1 === game.endow ? 'ちょうど元どおり。' : '信じたけれど、損をしてしまった…') + '</p>' +
+      '<h3 class="title-l" style="margin-top:16px">② あなたが名人のとき</h3>' +
+      '<p>' + (iv.bot ? '代役' : '相手') + 'は <b>' + x2 + '個</b> 預けてきた → 収穫 <b>' + h2 + '個</b>。あなたは <b>' + tr.ret + '%</b>（' + b2 + '個）を返した。</p>' +
+      '<div class="scorebox"><div>あなたの手もと<b>' + (h2 - b2) + '個</b></div><div>相手の最後の手もち<b>' + (game.endow - x2 + b2) + '個</b></div></div>' +
+      afterLinks() + '</div>');
   }
 
   /* ======================== 繰り返し囚人のジレンマ ======================== */

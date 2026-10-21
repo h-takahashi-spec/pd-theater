@@ -231,3 +231,30 @@ input[type=range] { width: 100%; accent-color: var(--gc); height: 30px; }
 }
 
 .ov .bar { grid-template-columns: 5.5em 1fr 3.2em; font-size: .8rem; }
+
+/* ---------- 授業名・課題の開放 ---------- */
+.course { display: inline-block; margin: 2px 0 6px; font-size: .78rem; font-weight: 700; letter-spacing: .03em; line-height: 1.5; color: var(--ink); background: #fff; border: 2px solid var(--ink); border-radius: 10px; padding: 2px 12px; }
+.course span { display: inline-block; }
+.gcard.locked { filter: grayscale(.85); opacity: .6; pointer-events: none; position: relative; }
+.lockbadge { display: inline-block; margin-left: 6px; font-size: .74rem; font-weight: 700; background: var(--ink); color: #fff; border-radius: 999px; padding: 0 9px; vertical-align: 2px; }
+.gates { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; margin-top: 8px; }
+.gate { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #fff; border: 2px solid var(--ink); border-radius: 10px; padding: 6px 10px; font-size: .88rem; }
+.gate.on { background: #e9f6e5; }
+.switch { position: relative; width: 52px; height: 28px; flex: none; }
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+.switch span { position: absolute; inset: 0; background: #d8cdb8; border: 2px solid var(--ink); border-radius: 999px; transition: background .2s; }
+.switch span::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 2px solid var(--ink); transition: transform .2s; }
+.switch input:checked + span { background: var(--good); }
+.switch input:checked + span::after { transform: translateX(24px); }
+.switch input:focus-visible + span { outline: 3px solid #f2c14e; outline-offset: 2px; }
+
+/* ---------- 開閉の自動反映 ---------- */
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:50;background:var(--ink);color:#fff;font-weight:700;border-radius:999px;padding:10px 22px;box-shadow:0 6px 18px rgba(0,0,0,.25);animation:toastIn .35s cubic-bezier(.2,1.4,.4,1);max-width:calc(100% - 32px);text-align:center}
+.toast.out{opacity:0;transition:opacity .5s}
+@keyframes toastIn{from{transform:translate(-50%,20px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
+.gcard{transition:filter .5s,opacity .5s}
+.gcard.opened{animation:unlock 1.1s ease}
+@keyframes unlock{0%{transform:scale(.96)}35%{transform:scale(1.04) rotate(-.6deg);box-shadow:0 0 0 6px #f2c14e,6px 6px 0 var(--ink)}100%{transform:none}}
+.pulse{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--good);margin-right:6px;vertical-align:1px;animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(63,125,78,.6)}70%{box-shadow:0 0 0 9px rgba(63,125,78,0)}100%{box-shadow:0 0 0 0 rgba(63,125,78,0)}}
+@media (prefers-reduced-motion: reduce){.gcard.opened,.toast,.pulse{animation:none}}
